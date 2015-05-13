@@ -35,3 +35,9 @@ test:
 	npm test
 
 .PHONY: all favicon website deploy setup redis test
+
+docker:
+	docker build -t docker-registry.corp.miocloud/shields
+
+docker_push:
+	docker push docker-registry.corp.miocloud/shields
