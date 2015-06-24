@@ -2644,7 +2644,8 @@ cache(function(data, match, sendBadge, request) {
 
   var badgeData = getBadgeData('build', data);
   request(options, function(err, res, json) {
-    if (err !== null) {
+    console.log("status", res.statusCode)
+    if (err !== null || res.statusCode == 404) {
       badgeData.text[1] = 'inaccessible';
       sendBadge(format, badgeData);
       return;
@@ -2675,6 +2676,57 @@ cache(function(data, match, sendBadge, request) {
     }
   });
 }));
+// auto jenkins badges based off Miovision scheme
+camp.route(/^\/pr\/(build|tests)\.(svg|png|gif|jpg|json)$/, function(data, match, end, ask) {
+  var scheme = "http";
+  var host = "jenkins-masters.corp.miocloud:8003";
+  var type = match[1];
+  var format = match[2];
+  // ask.req.headers['referrer'] = "https://github.com/Miovision/miosrc/pull/189"
+  var pull_match = ask.req.headers['referrer'].match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+  var repo = pull_match[2];
+  var branch = "develop";
+  var badgeData = getBadgeData(type, data);
+  if (pull_match) {
+    //Get the repo and branch from github.
+    var auth = serverSecrets['gh_client_id'] + ":" + serverSecrets['gh_client_secret'];
+    var ghUrl = "https://" + auth + "@api.github.com/repos/" + pull_match[1] + "/" + pull_match[2] + "/pulls/" + pull_match[3];
+    var options = {url: ghUrl, json: true, headers: githubHeaders}
+    request(options, function(err, res, body) {
+      if (err != null) {
+        badgeData.text[1] = 'inaccessible';
+        badge(badgeData, makeSend(format, ask.res, end));
+        return
+      }
+      try {
+        if ((+res.headers['x-ratelimit-remaining']) === 0) {
+          return;  // Hope for the best in the cache.
+        } else if (res.statusCode === 404) {
+          badgeData.text[1] = 'repo not found';
+          badge(badgeData, makeSend(format, ask.res, end));
+          return;
+        }
+        branch = body.head.ref
+        var job = [repo, branch, "compile"].join("-")
+        //GET /repos/:owner/:repo/pulls/:number
+        ask.res.statusCode = 302;
+        ask.res.setHeader('Location', "/jenkins/" + type + "/" + scheme +  "/" + host + "/" + job + "." + format);
+        ask.res.end();
+      } 
+      catch(e) {
+        console.log(e);
+        badgeData.text[1] = 'invalid';
+        badge(badgeData, makeSend(format, ask.res, end));
+        return;
+      }
+    });
+  } else {
+    badgeData.text[1] = 'PR not found';
+    badge(badgeData, makeSend(format, ask.res, end));
+    return;
+  }
+});
+
 
 // Jenkins tests integration
 camp.route(/^\/jenkins(-ci)?\/t\/(http(s)?)\/((?:[^\/]+)(?:\/.+?)?)\/([^\/]+)\.(svg|png|gif|jpg|json)$/,
