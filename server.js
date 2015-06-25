@@ -2718,12 +2718,13 @@ cache(function(data, match, sendBadge, request) {
   });
 }));
 // auto jenkins badges based off Miovision scheme
-camp.route(/^\/pr\/(build|tests)\.(svg|png|gif|jpg|json)$/, function(data, match, end, ask) {
+camp.route(/^\/pr\/(build|tests)\.(svg|png|gif|jpg|json|html)$/, function(data, match, end, ask) {
   var scheme = "http";
   var host = "jenkins-masters.corp.miocloud:8003";
   var type = match[1];
   var format = match[2];
   // ask.req.headers['referrer'] = "https://github.com/Miovision/miosrc/pull/189"
+  console.log("pr bad request referrer: ", ask.req.headers['referrer'])
   var pull_match = ask.req.headers['referrer'].match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
   var repo = pull_match[2];
   var branch = "develop";
@@ -2749,21 +2750,38 @@ camp.route(/^\/pr\/(build|tests)\.(svg|png|gif|jpg|json)$/, function(data, match
         }
         branch = body.head.ref
         var job = [repo, branch, "compile"].join("-")
-        //GET /repos/:owner/:repo/pulls/:number
         ask.res.statusCode = 302;
-        ask.res.setHeader('Location', "/jenkins/" + type + "/" + scheme +  "/" + host + "/" + job + "." + format);
+        if (format == "html") {
+          //redirect to the jenkins job.
+          ask.res.setHeader('Location', scheme + "://" + host + "/job/" + job + "/lastBuild" + (type == "tests" ? "/testReport" : "");
+        } else {
+          ask.res.setHeader('Location', "/jenkins/" + type + "/" + scheme +  "/" + host + "/" + job + "." + format);
+        }
         ask.res.end();
       } 
       catch(e) {
-        console.log(e);
-        badgeData.text[1] = 'invalid';
-        badge(badgeData, makeSend(format, ask.res, end));
+        if (format === "html") {
+          ask.res.statusCode = 500;
+          ask.res.write("r");
+
+          ask.res.setHeader('Location', "/jenkins/" + type + "/" + scheme +  "/" + host + "/" + job + "." + format);
+          ask.res.end();
+        } else {  
+          badgeData.text[1] = 'invalid';
+          badge(badgeData, makeSend(format, ask.res, end));
+        }
         return;
       }
     });
   } else {
-    badgeData.text[1] = 'PR not found';
-    badge(badgeData, makeSend(format, ask.res, end));
+    if (format === "html") {
+        ask.res.statusCode = 404;
+        ask.res.write("PR Not Found");
+        ask.res.end();
+    } else {    
+      badgeData.text[1] = 'PR not found';
+      badge(badgeData, makeSend(format, ask.res, end));
+    }
     return;
   }
 });

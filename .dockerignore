@@ -2,3 +2,4 @@
 log
 tmp
 *.example
+node_modules
