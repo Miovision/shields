@@ -2717,73 +2717,58 @@ cache(function(data, match, sendBadge, request) {
     }
   });
 }));
-// auto jenkins badges based off Miovision scheme
-camp.route(/^\/pr\/(build|tests)\.(svg|png|gif|jpg|json|html)$/, function(data, match, end, ask) {
+// auto jenkins badges based off Miovision scheme for PRs
+camp.route(/^\/pr\/(.*)\/(build|tests)\.(svg|png|gif|jpg|json|html)$/, function(data, match, end, ask) {
   var scheme = "http";
   var host = "jenkins-masters.corp.miocloud:8003";
-  var type = match[1];
-  var format = match[2];
-  // ask.req.headers['referrer'] = "https://github.com/Miovision/miosrc/pull/189"
-  console.log("pr bad request referrer: ", ask.req.headers['referrer'])
-  var pull_match = ask.req.headers['referrer'].match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
-  var repo = pull_match[2];
+  var gh_info = match[1].split("/");
+  var pr = gh_info[gh_info.length - 1]; //tail element is the PR #
+  var repo = gh_info.length >= 2 ? gh_info[0] : 'miosrc'; //repo is miosrc by default.
+  var type = match[2];
+  var format = match[3];
   var branch = "develop";
   var badgeData = getBadgeData(type, data);
-  if (pull_match) {
-    //Get the repo and branch from github.
-    var auth = serverSecrets['gh_client_id'] + ":" + serverSecrets['gh_client_secret'];
-    var ghUrl = "https://" + auth + "@api.github.com/repos/" + pull_match[1] + "/" + pull_match[2] + "/pulls/" + pull_match[3];
-    var options = {url: ghUrl, json: true, headers: githubHeaders}
-    request(options, function(err, res, body) {
-      if (err != null) {
-        badgeData.text[1] = 'inaccessible';
+  //Get the repo and branch from github.
+  var auth = serverSecrets['gh_client_id'] + ":" + serverSecrets['gh_client_secret'];
+  var ghUrl = "https://" + auth + "@api.github.com/repos/Miovision/" + repo + "/pulls/" + pr;
+  var options = {url: ghUrl, json: true, headers: githubHeaders}
+  request(options, function(err, res, body) {
+    if (err != null) {
+      badgeData.text[1] = 'inaccessible';
+      badge(badgeData, makeSend(format, ask.res, end));
+      return
+    }
+    try {
+      if ((+res.headers['x-ratelimit-remaining']) === 0) {
+        return;  // Hope for the best in the cache.
+      } else if (res.statusCode === 404) {
+        badgeData.text[1] = 'repo not found';
         badge(badgeData, makeSend(format, ask.res, end));
-        return
-      }
-      try {
-        if ((+res.headers['x-ratelimit-remaining']) === 0) {
-          return;  // Hope for the best in the cache.
-        } else if (res.statusCode === 404) {
-          badgeData.text[1] = 'repo not found';
-          badge(badgeData, makeSend(format, ask.res, end));
-          return;
-        }
-        branch = body.head.ref
-        var job = [repo, branch, "compile"].join("-")
-        ask.res.statusCode = 302;
-        if (format == "html") {
-          //redirect to the jenkins job.
-          ask.res.setHeader('Location', scheme + "://" + host + "/job/" + job + "/lastBuild" + (type == "tests" ? "/testReport" : "");
-        } else {
-          ask.res.setHeader('Location', "/jenkins/" + type + "/" + scheme +  "/" + host + "/" + job + "." + format);
-        }
-        ask.res.end();
-      } 
-      catch(e) {
-        if (format === "html") {
-          ask.res.statusCode = 500;
-          ask.res.write("r");
-
-          ask.res.setHeader('Location', "/jenkins/" + type + "/" + scheme +  "/" + host + "/" + job + "." + format);
-          ask.res.end();
-        } else {  
-          badgeData.text[1] = 'invalid';
-          badge(badgeData, makeSend(format, ask.res, end));
-        }
         return;
       }
-    });
-  } else {
-    if (format === "html") {
-        ask.res.statusCode = 404;
-        ask.res.write("PR Not Found");
+      branch = body.head.ref
+      var job = [repo, branch, "compile"].join("-")
+      ask.res.statusCode = 302;
+      if (format == "html") {
+        //redirect to the jenkins job.
+        ask.res.setHeader('Location', scheme + "://" + host + "/job/" + job + "/lastBuild" + (type == "tests" ? "/testReport" : ""));
+      } else {
+        ask.res.setHeader('Location', "/jenkins/" + (type === "tests" ? "t" : "s") + "/" + scheme +  "/" + host + "/" + job + "." + format);
+      }
+      ask.res.end();
+    } 
+    catch(e) {
+      if (format === "html") {
+        ask.res.statusCode = 500;
+        ask.res.write("Failed to retrieve Github PR info");
         ask.res.end();
-    } else {    
-      badgeData.text[1] = 'PR not found';
-      badge(badgeData, makeSend(format, ask.res, end));
+      } else {  
+        badgeData.text[1] = 'invalid';
+        badge(badgeData, makeSend(format, ask.res, end));
+      }
+      return;
     }
-    return;
-  }
+  });
 });
 
 
