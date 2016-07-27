@@ -2718,7 +2718,7 @@ cache(function(data, match, sendBadge, request) {
   });
 }));
 // auto jenkins badges based off Miovision scheme for PRs
-camp.route(/^\/pr\/(.*)\/(build|tests)\.(svg|png|gif|jpg|json|html)$/, function(data, match, end, ask) {
+camp.route(/^\/pr\/(.*)\/(build|tests|acceptancetests)\.(svg|png|gif|jpg|json|html)$/, function(data, match, end, ask) {
   var scheme = "http";
   var host = "jenkins-masters.corp.miocloud:8003";
   var gh_info = match[1].split("/");
@@ -2747,13 +2747,13 @@ camp.route(/^\/pr\/(.*)\/(build|tests)\.(svg|png|gif|jpg|json|html)$/, function(
         return;
       }
       branch = body.head.ref
-      var job = [repo, branch, "compile"].join("-")
+      var job = [repo, branch, (type === "acceptancetests" ? "acceptance" : "compile")].join("-")
       ask.res.statusCode = 302;
       if (format == "html") {
         //redirect to the jenkins job.
-        ask.res.setHeader('Location', scheme + "://" + host + "/job/" + job + "/lastBuild" + (type == "tests" ? "/testReport" : ""));
+        ask.res.setHeader('Location', scheme + "://" + host + "/job/" + job + "/lastBuild" + ((type === "acceptancetests" || type === "tests") ? "/testReport" : ""));
       } else {
-        ask.res.setHeader('Location', "/jenkins/" + (type === "tests" ? "t" : "s") + "/" + scheme +  "/" + host + "/" + job + "." + format);
+        ask.res.setHeader('Location', "/jenkins/" + ((type === "tests" || type ==="acceptancetests") ? "t" : "s") + "/" + scheme +  "/" + host + "/" + job + "." + format);
       }
       ask.res.end();
     } 
