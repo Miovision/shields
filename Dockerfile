@@ -2,7 +2,7 @@ FROM ubuntu:14.04
 
 ### Install NPM v0.10.x ###
 RUN apt-get update && apt-get install -y wget
-RUN wget https://nodejs.org/dist/latest-v0.10.x/node-v0.10.46-linux-x64.tar.gz
+RUN wget https://nodejs.org/dist/v0.10.46/node-v0.10.46-linux-x64.tar.gz
 RUN tar xfz node-v0.10.46-linux-x64.tar.gz
 RUN ln -s /node-v0.10.46-linux-x64/bin/node /usr/local/bin/node
 RUN ln -s /node-v0.10.46-linux-x64/bin/npm /usr/local/bin/npm
